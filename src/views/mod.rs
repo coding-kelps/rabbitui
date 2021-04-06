@@ -1,15 +1,30 @@
 pub mod exchange;
 pub mod overview;
+pub mod queues;
 
 use termion::event::Key;
 use tui::{
     backend::Backend,
-    layout::{Constraint, Layout, Direction, Rect},
+    layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
 
-pub trait Drawable {
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect);
+/// A generically drawable object. Simply describes
+/// ability to be drawn given an area boundary and
+/// a frame.
+pub trait Drawable<B>
+where
+    B: Backend,
+{
+    fn draw(&mut self, f: &mut Frame<B>, area: Rect);
+}
+
+/// A pane that manages its own state. This involves
+/// any knowledge around handling updates and inputs.
+pub trait StatefulPane<B>: Drawable<B>
+where
+    B: Backend,
+{
     fn handle_key(&mut self, key: Key);
     fn update(&mut self);
 }
@@ -40,10 +55,4 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
             .as_ref(),
         )
         .split(popup_layout[1])[1]
-}
-
-pub struct Pane<D> where
-    D: Drawable,
-{
-    pub content: D
 }

@@ -1,16 +1,17 @@
+#![allow(dead_code)]
 // Taken from
 // https://github.com/fdehau/tui-rs/blob/master/examples/util/event.rs
-use std::io;
-use std::sync::mpsc;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc,
+    },
+    thread,
+    time::Duration,
 };
-use std::thread;
-use std::time::Duration;
 
-use termion::event::Key;
-use termion::input::TermRead;
+use termion::{event::Key, input::TermRead};
 
 pub enum Event<I> {
     Input(I),
@@ -36,7 +37,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             exit_key: Key::Char('q'),
-            tick_rate: Duration::from_millis(250),
+            tick_rate: Duration::from_millis(500),
         }
     }
 }

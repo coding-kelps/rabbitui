@@ -1,152 +1,196 @@
-use super::{Pane, Drawable};
-use crate::{Datatable, Rowable, ManagementClient};
-use crate::models::Overview;
+use super::{Drawable, StatefulPane};
+use crate::{
+    models::Overview,
+    widgets::{
+        chart::{ChartData, RChart},
+        help::Help,
+    },
+    ManagementClient,
+};
+
+use std::sync::{mpsc, Arc};
 
 use termion::event::Key;
 use tui::{
     backend::Backend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    symbols,
-    text::Span,
-    widgets::{Axis, Block, Borders, Chart, Dataset, GraphType},
-    Terminal,
+    text::{Span, Spans},
+    widgets::{Block, Borders, List, ListItem},
     Frame,
 };
 
-const X_WINDOW: u64 = 100;
-const Y_PADDING: u64 = 10;
+const HELP: &str = "Welcome to RabbiTui! The help displayed \
+here is relevant to the Overview tab. Every help panel will \
+be specific to the tab you are in.
+
+The overview pane shows high level throughput analytics.
+
+Keys:
+  - h: previous tab
+  - l: next tab
+  - ?: close the help menu";
 
 #[derive(Default)]
 struct OverviewData {
-    overall: Vec<(f64, f64)>,
-    ready: Vec<(f64, f64)>,
-    unacked: Vec<(f64, f64)>,
+    overall: ChartData,
+    ready: ChartData,
+    unacked: ChartData,
+    disk_read_rate: ChartData,
+    disk_write_rate: ChartData,
 }
 
-impl OverviewData {
-    fn update(&mut self, update: Overview) {
-        self.overall.push(
-            (
-                self.overall.last().unwrap().0 + 1.0,
-                update.queue_totals.messages as f64,
-            )
-        );
-    }
-}
-
-pub struct OverviewPane<'a, M> where
-    M: ManagementClient,
-{
-    dataset: Vec<(f64, f64)>,
+pub struct OverviewPane {
     data: OverviewData,
-    client: &'a M,
+    data_chan: mpsc::Receiver<Overview>,
+    counter: f64,
+    should_show_help: bool,
 }
 
-impl<'a, M> Pane<OverviewPane<'a, M>> where
-    M: ManagementClient,
-{
-    pub fn new(client: &'a M) -> Self where
+impl OverviewPane {
+    pub fn new<M>(client: Arc<M>, data_chan: mpsc::Receiver<Overview>) -> Self
+    where
         M: ManagementClient,
     {
         let data = client.get_overview();
-        let dataset = vec![(0.0, data.queue_totals.messages)];
-        let overall = vec![(0.0, data.queue_totals.messages)];
-        let ready = vec![(0.0, data.queue_totals.messages_ready)];
-        let unacked = vec![(0.0, data.queue_totals.messages_unacked)];
+        let mut overall = ChartData::default();
+        overall.push(data.queue_totals.messages);
+        let mut ready = ChartData::default();
+        ready.push(data.queue_totals.messages_ready);
+        let mut unacked = ChartData::default();
+        unacked.push(data.queue_totals.messages_unacked);
+        let mut disk_read_rate = ChartData::default();
+        disk_read_rate.push(data.message_stats.disk_reads_details.rate);
+        let mut disk_write_rate = ChartData::default();
+        disk_write_rate.push(data.message_stats.disk_writes_details.rate);
         Self {
-            content: OverviewPane {
-                dataset,
-                client,
-                data: OverviewData {
-                    overall,
-                    ready,
-                    unacked,
-                },
-            }
+            counter: 0.,
+            data_chan,
+            data: OverviewData {
+                overall,
+                ready,
+                unacked,
+                disk_read_rate,
+                disk_write_rate,
+            },
+            should_show_help: false,
+        }
+    }
+
+    fn draw_messages_panel<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let datasets = [&self.data.overall, &self.data.ready, &self.data.unacked];
+        let colors = [Color::Yellow, Color::Cyan, Color::Red];
+        RChart::new(datasets, colors).draw(f, area);
+    }
+
+    fn draw_message_rates_panel<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let datasets = [&self.data.disk_read_rate, &self.data.disk_write_rate];
+        let colors = [Color::Magenta, Color::Green];
+        RChart::new(datasets, colors).draw(f, area);
+    }
+
+    fn draw_message_rates_list<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let datasets = [&self.data.disk_read_rate, &self.data.disk_write_rate];
+        let colors = [Color::Magenta, Color::Green];
+        let labels = ["Disk read", "Disk write"];
+        self.draw_info_list(f, area, labels, datasets, colors, "/s");
+    }
+
+    fn draw_info_list<B, const W: usize>(
+        &self,
+        f: &mut Frame<B>,
+        area: Rect,
+        labels: [&str; W],
+        values: [&ChartData; W],
+        colors: [Color; W],
+        suffix: &str,
+    ) where
+        B: Backend,
+    {
+        let items: Vec<ListItem> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, l)| {
+                let val = values[i].last_value();
+                ListItem::new(vec![
+                    Spans::from(vec![
+                        Span::styled(format!("{:<10}", l), Style::default().fg(colors[i])),
+                        Span::raw(" "),
+                        Span::styled(
+                            format!("{}{}", val, suffix),
+                            Style::default().add_modifier(Modifier::BOLD),
+                        ),
+                    ]),
+                    // for putting visual space between rows
+                    Spans::from(""),
+                ])
+            })
+            .collect();
+        let list = List::new(items).block(Block::default().borders(Borders::ALL));
+        f.render_widget(list, area);
+    }
+
+    fn draw_message_list<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
+        let datasets = [&self.data.ready, &self.data.overall, &self.data.unacked];
+        let labels = ["Ready", "Total", "Unacked"];
+        let colors = [Color::Yellow, Color::Cyan, Color::Red];
+        self.draw_info_list(f, area, labels, datasets, colors, "");
+    }
+}
+
+impl<B> Drawable<B> for OverviewPane
+where
+    B: Backend,
+{
+    fn draw(&mut self, f: &mut Frame<B>, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)].as_ref())
+            .split(area);
+        let count_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(90), Constraint::Percentage(10)].as_ref())
+            .split(chunks[0]);
+        let rate_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(85), Constraint::Percentage(15)].as_ref())
+            .split(chunks[1]);
+        self.draw_messages_panel(f, count_chunks[0]);
+        self.draw_message_list(f, count_chunks[1]);
+        self.draw_message_rates_panel(f, rate_chunks[0]);
+        self.draw_message_rates_list(f, rate_chunks[1]);
+        if self.should_show_help {
+            let help = Help::new(HELP);
+            help.draw(f, area);
         }
     }
 }
 
-impl<'a, M> Drawable for OverviewPane<'a, M> where
-    M: ManagementClient,
+impl<B> StatefulPane<B> for OverviewPane
+where
+    B: Backend,
 {
-    fn draw<B: Backend>(&mut self, f: &mut Frame<B>, area: Rect) {
-        let data_y_max = self.dataset
-            .iter()
-            .map(|p| p.1 as u64)
-            .max()
-            .unwrap();
-        let data_x_max = self.dataset
-            .iter()
-            .map(|p| p.0 as u64)
-            .max()
-            .unwrap();
-        let y_max = data_y_max + Y_PADDING;
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(
-                [
-                    Constraint::Ratio(1, 2),
-                    Constraint::Ratio(1, 2),
-                ]
-                .as_ref(),
-            )
-            .split(area);
-        let datasets = vec![
-            Dataset::default()
-                .name("Messages")
-                .marker(symbols::Marker::Braille)
-                .style(Style::default().fg(Color::Yellow))
-                .data(self.dataset.as_slice()),
-        ];
-        let lb = if data_x_max < X_WINDOW {
-            0
-        } else {
-            data_x_max - X_WINDOW
-        };
-        let chart = Chart::new(datasets)
-            .block(
-                Block::default()
-                .title(Span::styled(
-                    "Messages",
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .borders(Borders::ALL),
-            )
-            .x_axis(
-                Axis::default()
-                    .style(Style::default().fg(Color::Gray))
-                    .bounds([lb as f64, data_x_max as f64])
-            )
-            .y_axis(
-                Axis::default()
-                    .title("Count")
-                    .style(Style::default().fg(Color::Gray))
-                    .labels(vec![
-                        Span::raw("0"),
-                        Span::styled(format!("{}", y_max), Style::default().add_modifier(Modifier::BOLD)),
-                    ])
-                    .bounds([0.0, y_max as f64]),
-            );
-        f.render_widget(chart, chunks[0]);
-
-    }
-
     fn handle_key(&mut self, key: Key) {
-        
+        match key {
+            Key::Char('?') => {
+                self.should_show_help = !self.should_show_help;
+            }
+            _ => {}
+        }
     }
 
     fn update(&mut self) {
-        let update = self.client.get_overview();
-        self.dataset.push(
-            (
-                self.dataset.last().unwrap().0 + 1.0,
-                self.dataset.last().unwrap().1 + 1.0,
-                // update.queue_totals.messages + 1.0,
-            )
-        );
+        if let Some(update) = self.data_chan.try_iter().next() {
+            self.counter += 1.0;
+            self.data.ready.push(update.queue_totals.messages_ready);
+            self.data.overall.push(update.queue_totals.messages);
+            self.data.unacked.push(update.queue_totals.messages_unacked);
+            self.data
+                .disk_write_rate
+                .push(update.message_stats.disk_writes_details.rate);
+            self.data
+                .disk_read_rate
+                .push(update.message_stats.disk_reads_details.rate);
+        }
     }
 }
