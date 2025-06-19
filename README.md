@@ -1,21 +1,23 @@
 <p align="center">
   <h1 align="center">RabbiTui</h1>
   <p align="center">A terminal client for the RabbitMQ Management API</p>
-  <img src="./assets/rabbitui.png" alt="Demo on MacOs">
 </p>
 
-## Installation
+> [!IMPORTANT]  
+> Please note that the rabbitui project is still in an early stage, and many 
+> features are still missing. Please check our 
+> [roadmap](https://github.com/orgs/coding-kelps/projects/11) to learn about our 
+> current progress and upcoming features.
 
-### Homebrew
+## Overview
 
-```
-brew tap maxmindlin/rabbitui
-brew install rabbitui
-```
+This repository host a fork of @maxmindlin's [rabbitui](https://github.com/maxmindlin/rabbitui).
 
-### Building from source
+### Why fork this project?
 
-`cargo build --release && ./target/release/rabbitui` builds in release mode and runs the resulting binary.
+We decided to fork @maxmindlin's repository because it appears to be no longer actively maintained.
+
+Additionally, we plan to expand the TUI's platform compatibility to support more environments.
 
 ### Usage
 
