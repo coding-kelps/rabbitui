@@ -17,8 +17,8 @@ rust-version = "1.87"
 [dependencies]
 reqwest = { version = "0.12.20", features = ["blocking", "json"] }
 serde = { version = "1.0.219", features = ["derive"] }
-tui = "0.14.0"
-termion = "1.5.6"
 clipboard = "0.5.0"
 clap = { version = "4.5.40", features = ["derive"] }
 dirs = "6.0.0"
+ratatui = "0.29.0"
+crossterm = "0.29.0"
