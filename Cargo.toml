@@ -1,16 +1,16 @@
 [package]
 name = "rabbitui"
 version = "0.1.0"
-authors = ["Max Mindlin <maxmindlin@gmail.com>"]
+authors = ["Max Mindlin <maxmindlin@gmail.com>", "Coding Kelps <contact@kelps.org>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version = "0.11.2", features = ["blocking", "json"] }
+reqwest = { version = "0.12.20", features = ["blocking", "json"] }
 serde = { version = "1.0.125", features = ["derive"] }
 tui = "0.14.0"
 termion = "1.5.6"
 clipboard = "0.5.0"
-clap = "3.0.0-beta.2"
+clap = { version = "4.5.40", features = ["derive"] }
 dirs = "3.0.1"

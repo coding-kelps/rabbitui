@@ -1,3 +1,4 @@
+mod cli;
 mod client;
 mod config;
 mod events;
@@ -5,6 +6,7 @@ mod models;
 mod views;
 mod widgets;
 
+use cli::Cli;
 use client::Client;
 use config::AppConfig;
 use events::{Event, Events};
@@ -20,7 +22,7 @@ use std::{
     time::Duration,
 };
 
-use clap::{App as CApp, Arg};
+use clap::Parser;
 use termion::{
     event::Key,
     input::MouseTerminal,
@@ -36,9 +38,6 @@ use tui::{
     Frame, Terminal,
 };
 
-const DEFAULT_USER: &str = "guest";
-const DEFAULT_PASS: &str = "guest";
-const DEFAULT_ADDR: &str = "http://localhost:15672";
 const ASCII: &str = r#"
    ___       __   __   _ ______     _ 
   / _ \___ _/ /  / /  (_)_  __/_ __(_)
@@ -368,43 +367,8 @@ where
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let matches = CApp::new("RabbiTui")
-        .version("0.1.0")
-        .author("Max Mindlin <maxmindlin@gmail.com>")
-        .about("A TUI application for RabbitMQ management")
-        .arg(
-            Arg::new("user")
-                .about("Username for the API auth")
-                .takes_value(true)
-                .short('u')
-                .long("user")
-                .required(false)
-                .default_value(DEFAULT_USER),
-        )
-        .arg(
-            Arg::new("pass")
-                .about("Password for the API auth")
-                .takes_value(true)
-                .short('p')
-                .long("pass")
-                .required(false)
-                .default_value(DEFAULT_PASS),
-        )
-        .arg(
-            Arg::new("addr")
-                .about("Http(s) address of the API. Excludes trailing slash")
-                .takes_value(true)
-                .short('a')
-                .long("addr")
-                .required(false)
-                .default_value(DEFAULT_ADDR),
-        )
-        .get_matches();
-
-    let user = matches.value_of("user").unwrap();
-    let pass = matches.value_of("pass").unwrap();
-    let addr = matches.value_of("addr").unwrap();
-    let c = Client::new(addr, user, Some(pass.to_string()));
+    let cli = Cli::parse();
+    let c = Client::new(&cli.addr, &cli.user, Some(cli.pass));
     if let Err(_) = c.ping() {
         println!("Unable to ping RabbitMQ API.");
         println!("Check that the service is running and that creds are correct.");

@@ -15,4 +15,6 @@ services:
 
 configs:
   rabbitmq-plugins:
-    content: "[rabbitmq_management]."  
+    content: |
+      [rabbitmq_management].
+
