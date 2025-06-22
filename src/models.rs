@@ -1,0 +1,190 @@
+use serde::{Deserialize, Serialize};
+
+pub trait Rowable {
+    fn to_row(&self) -> Vec<String>;
+}
+
+trait ToRate {
+    fn to_rate(&self) -> String;
+}
+
+impl ToRate for String {
+    fn to_rate(&self) -> String {
+        format!("{}/s", self)
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum MQEncoding {
+    Auto,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct ExchangeInfo {
+    pub auto_delete: bool,
+    pub durable: bool,
+    pub internal: bool,
+    pub name: String,
+    #[serde(alias = "type")]
+    pub t: String,
+    #[serde(default)]
+    pub message_stats: ExchangeMsgStats,
+    pub user_who_performed_action: String,
+    pub vhost: String,
+}
+
+#[derive(Deserialize, Debug, Default)]
+#[serde(default)]
+pub struct ExchangeMsgStats {
+    #[serde(alias = "publish_in_details")]
+    pub in_rate: RateContainer,
+    #[serde(alias = "publish_out_details")]
+    pub out_rate: RateContainer,
+}
+
+impl ExchangeInfo {
+    pub fn headers<'a>() -> [&'a str; 4] {
+        ["Name", "Type", "Rate In", "Rate Out"]
+    }
+}
+
+impl Rowable for ExchangeInfo {
+    fn to_row(&self) -> Vec<String> {
+        let nice_name = if self.name.is_empty() {
+            "(AMQP DEFAULT)".to_owned()
+        } else {
+            self.name.clone()
+        };
+
+        vec![
+            nice_name,
+            self.t.clone(),
+            self.message_stats.in_rate.rate.to_string().to_rate(),
+            self.message_stats.out_rate.rate.to_string().to_rate(),
+        ]
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct ExchangeBindings {
+    pub source: String,
+    pub vhost: String,
+    #[serde(alias = "destination")]
+    pub dest: String,
+    #[serde(alias = "destination_type")]
+    pub dest_type: String,
+    pub routing_key: String,
+    #[serde(alias = "properties_key")]
+    pub prop_key: String,
+}
+
+#[allow(dead_code)]
+impl ExchangeBindings {
+    pub fn headers<'a>() -> [&'a str; 2] {
+        ["To", "Routing key"]
+    }
+}
+
+impl Rowable for ExchangeBindings {
+    fn to_row(&self) -> Vec<String> {
+        vec![self.dest.clone(), self.routing_key.clone()]
+    }
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct Overview {
+    pub queue_totals: OverviewQueueTotals,
+    pub message_stats: OverviewMessageRates,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct OverviewQueueTotals {
+    pub messages: f64,
+    pub messages_ready: f64,
+    #[serde(alias = "messages_unacknowledged")]
+    pub messages_unacked: f64,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct OverviewMessageRates {
+    pub disk_reads: f64,
+    pub disk_reads_details: RateContainer,
+    pub disk_writes: f64,
+    pub disk_writes_details: RateContainer,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+pub struct RateContainer {
+    pub rate: f64,
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug, Clone)]
+pub struct QueueInfo {
+    pub name: String,
+    #[serde(alias = "type")]
+    pub t: String,
+    pub state: String,
+    #[serde(default)]
+    pub message_stats: QueueMsgStats,
+    #[serde(alias = "messages_ready")]
+    pub ready: u64,
+    #[serde(alias = "messages_unacknowledged")]
+    pub unacked: u64,
+    #[serde(alias = "messages")]
+    pub total: u64,
+    pub vhost: String,
+}
+
+#[derive(Deserialize, Debug, Default, Clone)]
+#[serde(default)]
+pub struct QueueMsgStats {
+    pub publish: u64,
+    pub publish_details: RateContainer,
+    pub deliver_get: u64,
+    pub deliver_get_details: RateContainer,
+    pub ack: u64,
+    pub ack_details: RateContainer,
+}
+
+impl QueueInfo {
+    pub fn headers<'a>() -> [&'a str; 9] {
+        [
+            "Name",
+            "Type",
+            "State",
+            "Ready",
+            "Unacked",
+            "Total",
+            "Incoming",
+            "Deliver / Get",
+            "Ack",
+        ]
+    }
+}
+
+impl Rowable for QueueInfo {
+    fn to_row(&self) -> Vec<String> {
+        vec![
+            self.name.clone(),
+            self.t.clone(),
+            self.state.clone(),
+            self.ready.to_string(),
+            self.unacked.to_string(),
+            self.total.to_string(),
+            self.message_stats.ack_details.rate.to_string().to_rate(),
+            self.message_stats
+                .deliver_get_details
+                .rate
+                .to_string()
+                .to_rate(),
+            self.message_stats.ack_details.rate.to_string().to_rate(),
+        ]
+    }
+}
