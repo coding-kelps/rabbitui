@@ -1,3 +1,3 @@
-pub mod testing_chart;
+mod chart;
 
-pub use testing_chart::TestingChart;
+pub use chart::Chart;
