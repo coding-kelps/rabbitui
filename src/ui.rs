@@ -1,6 +1,5 @@
 use crate::{
-    app::App,
-    widgets::TestingChart,
+    app::{App, SelectedTab},
 };
 use ratatui::{
     prelude::*,
@@ -8,6 +7,7 @@ use ratatui::{
     layout::Rect,
     widgets::{Widget, Paragraph, Tabs},
 };
+use strum::IntoEnumIterator;
 
 const ASCII: &str = r#"
    ___       __   __   _ ______     _ 
@@ -17,7 +17,7 @@ const ASCII: &str = r#"
                                       
 "#;
 
-impl Widget for &App {
+impl Widget for &mut App {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [banner, tabs] = Layout::vertical([
                 Constraint::Length(6),
@@ -27,34 +27,34 @@ impl Widget for &App {
 
         Paragraph::new(ASCII)
             .render(banner, buf);
-        self.render_tabs(tabs, buf);
-    }
-}
 
-impl App {
-    fn render_tabs(&self, area: Rect, buf: &mut Buffer) {
         let [tab_titles, tab_content] = Layout::vertical([
-                Constraint::Length(1),
-                Constraint::Fill(1),
-            ])
-            .areas(area);
+            Constraint::Length(2),
+            Constraint::Fill(1),
+        ])
+        .areas(tabs);
 
-        Tabs::new(vec!["Overview", "Exchanges", "Queues"])
+        let selected_tab_index = self.selected_tab as usize;
+
+        Tabs::new(SelectedTab::iter().map(SelectedTab::title))
+            .select(selected_tab_index)
             .padding("", "")
             .divider(" ")
             .render(tab_titles, buf);
 
-        self.render_overview(tab_content, buf);
+        match self.selected_tab {
+            SelectedTab::Overview => {},
+            SelectedTab::Exchanges => {},
+            SelectedTab::Queues => {
+                self.queues.render(tab_content, buf);
+            },
+        }
     }
+}
 
-    fn render_overview(&self, area: Rect, buf: &mut Buffer) {
-        let [message_chart, disk_chart] = Layout::vertical([
-                Constraint::Ratio(1, 2),
-                Constraint::Ratio(1, 2),
-            ])
-            .areas(area);
-
-        TestingChart{}.render(message_chart, buf);
-        TestingChart{}.render(disk_chart, buf);
+impl SelectedTab {
+    fn title(self) -> Line<'static> {
+        format!("  {self}  ")
+            .into()
     }
 }
